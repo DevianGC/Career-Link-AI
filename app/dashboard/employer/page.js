@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, limit, getDocs } from 'firebase/firestore';
 import { firebaseDb, firebaseAuth } from '@/lib/firebaseClient';
 import DashboardLayout from '@/components/Dashboard/DashboardLayout';
 import styles from './employer-dashboard.module.css';
@@ -55,15 +55,16 @@ export default function EmployerDashboard() {
     fetchEmployerProfile();
   }, []);
 
-  // Real-time listener for ALL active jobs (same as career office)
+  // Real-time listener for employer's own active jobs
   useEffect(() => {
-    if (!firebaseDb) {
+    if (!firebaseDb || !currentUserId) {
       setLoading(false);
       return;
     }
 
     const jobsQuery = query(
       collection(firebaseDb, 'jobs'),
+      where('employerId', '==', currentUserId),
       where('status', '==', 'Active'),
       limit(10)
     );
@@ -87,8 +88,11 @@ export default function EmployerDashboard() {
       setLoading(false);
     }, (error) => {
       console.error('Error fetching jobs:', error);
-      // Fallback: count all jobs if index issue
-      const fallbackQuery = query(collection(firebaseDb, 'jobs'));
+      // Fallback: fetch all jobs for this employer and filter
+      const fallbackQuery = query(
+        collection(firebaseDb, 'jobs'),
+        where('employerId', '==', currentUserId)
+      );
       const fallbackUnsubscribe = onSnapshot(fallbackQuery, (snapshot) => {
         const activeJobs = snapshot.docs.filter(doc => doc.data().status === 'Active');
         setJobs(activeJobs.map(doc => ({
@@ -105,95 +109,113 @@ export default function EmployerDashboard() {
 
     return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUserId]);
 
-  // Real-time listener for ALL applications (same as career office)
+  // Real-time listener for applications to employer's jobs only
   useEffect(() => {
-    if (!firebaseDb) return;
+    if (!firebaseDb || !currentUserId) return;
 
-    const applicationsQuery = query(
-      collection(firebaseDb, 'applications'),
-      limit(10)
-    );
+    // First, get all job IDs for this employer
+    const getEmployerApplications = async () => {
+      try {
+        const jobsSnapshot = await getDocs(
+          query(collection(firebaseDb, 'jobs'), where('employerId', '==', currentUserId))
+        );
+        
+        const jobIds = jobsSnapshot.docs.map(doc => doc.id);
+        
+        if (jobIds.length === 0) {
+          setRecentApplications([]);
+          setStats(prev => ({ ...prev, totalApplications: 0 }));
+          return;
+        }
 
-    const unsubscribe = onSnapshot(applicationsQuery, async (snapshot) => {
-      // Fetch user data for each application
-      const applicationsWithUsers = await Promise.all(
-        snapshot.docs.map(async (doc) => {
-          const appData = doc.data();
-          let candidateName = 'Unknown Candidate';
-          let experience = 'N/A';
-          
-          // Fetch user name from users collection
-          if (appData.userId) {
-            try {
-              const userQuery = query(
-                collection(firebaseDb, 'users'),
-                where('__name__', '==', appData.userId)
-              );
-              const userSnapshot = await new Promise((resolve) => {
-                const unsub = onSnapshot(userQuery, (snap) => {
-                  unsub();
-                  resolve(snap);
-                });
-              });
+        // Get applications for these jobs
+        const applicationsQuery = query(
+          collection(firebaseDb, 'applications'),
+          where('jobId', 'in', jobIds.slice(0, 10)), // Firestore 'in' limit is 10
+          limit(10)
+        );
+
+        const unsubscribe = onSnapshot(applicationsQuery, async (snapshot) => {
+          // Fetch user data for each application
+          const applicationsWithUsers = await Promise.all(
+            snapshot.docs.map(async (doc) => {
+              const appData = doc.data();
+              let candidateName = 'Unknown Candidate';
+              let experience = 'N/A';
               
-              if (!userSnapshot.empty) {
-                const userData = userSnapshot.docs[0].data();
-                candidateName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email || 'Unknown Candidate';
-                experience = userData.yearsOfExperience || userData.graduationYear || 'N/A';
+              // Fetch user name from users collection
+              if (appData.userId) {
+                try {
+                  const userQuery = query(
+                    collection(firebaseDb, 'users'),
+                    where('__name__', '==', appData.userId)
+                  );
+                  const userSnapshot = await getDocs(userQuery);
+                  
+                  if (!userSnapshot.empty) {
+                    const userData = userSnapshot.docs[0].data();
+                    candidateName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email || 'Unknown Candidate';
+                    experience = userData.yearsOfExperience || userData.graduationYear || 'N/A';
+                  }
+                } catch (error) {
+                  console.error('Error fetching user:', error);
+                }
               }
-            } catch (error) {
-              console.error('Error fetching user:', error);
-            }
-          }
+              
+              return {
+                id: doc.id,
+                ...appData,
+                candidateName,
+                studentName: candidateName,
+                position: appData.jobTitle || appData.position,
+                appliedDate: appData.createdAt?.split('T')[0] || appData.date || 'N/A',
+                experience: experience
+              };
+            })
+          );
+
+          const sortedApplications = applicationsWithUsers.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+            const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+            return dateB - dateA;
+          }).slice(0, 5);
           
-          return {
-            id: doc.id,
-            ...appData,
-            candidateName,
-            studentName: candidateName,
-            position: appData.jobTitle || appData.position,
-            appliedDate: appData.createdAt?.split('T')[0] || appData.date || 'N/A',
-            experience: experience
-          };
-        })
-      );
+          setRecentApplications(sortedApplications);
+          
+          // Update stats
+          const totalApplications = applicationsWithUsers.length;
+          const pendingCount = applicationsWithUsers.filter(app => {
+            const status = app.status;
+            return status === 'Applied' || status === 'pending' || status === 'submitted';
+          }).length;
+          const shortlisted = applicationsWithUsers.filter(app => 
+            app.status === 'Shortlisted' || app.status === 'Offer'
+          ).length;
+          const interviews = applicationsWithUsers.filter(app => 
+            app.status === 'Interview' || app.status === 'interview'
+          ).length;
+          
+          setStats(prev => ({
+            ...prev,
+            totalApplications,
+            shortlistedCandidates: shortlisted,
+            scheduledInterviews: interviews
+          }));
+        }, (error) => {
+          console.error('Error fetching applications:', error);
+        });
 
-      const sortedApplications = applicationsWithUsers.sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-        const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-        return dateB - dateA;
-      }).slice(0, 5);
-      
-      setRecentApplications(sortedApplications);
-      
-      // Update stats - same as career office
-      const totalApplications = applicationsWithUsers.length;
-      const pendingCount = applicationsWithUsers.filter(app => {
-        const status = app.status;
-        return status === 'Applied' || status === 'pending' || status === 'submitted';
-      }).length;
-      const shortlisted = applicationsWithUsers.filter(app => 
-        app.status === 'Shortlisted' || app.status === 'Offer'
-      ).length;
-      const interviews = applicationsWithUsers.filter(app => 
-        app.status === 'Interview' || app.status === 'interview'
-      ).length;
-      
-      setStats(prev => ({
-        ...prev,
-        totalApplications,
-        shortlistedCandidates: shortlisted,
-        scheduledInterviews: interviews
-      }));
-    }, (error) => {
-      console.error('Error fetching applications:', error);
-    });
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Error setting up applications listener:', error);
+      }
+    };
 
-    return () => unsubscribe();
+    getEmployerApplications();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUserId]);
 
   // Real-time listener for faculty mentors
   useEffect(() => {

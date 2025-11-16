@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { firebaseAuth } from '@/lib/firebaseClient';
 import DashboardLayout from '@/components/Dashboard/DashboardLayout';
 import styles from './jobs.module.css';
 
@@ -14,6 +15,7 @@ export default function EmployerJobs() {
   const [jobToDelete, setJobToDelete] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [editFormData, setEditFormData] = useState({
     title: '',
     department: '',
@@ -36,22 +38,39 @@ export default function EmployerJobs() {
     requirements: ''
   });
 
-  // Fetch jobs from Firebase on component mount
+  // Get current user
   useEffect(() => {
-    fetchJobs();
+    const unsubscribe = firebaseAuth?.onAuthStateChanged((user) => {
+      if (user) {
+        setCurrentUserId(user.uid);
+      }
+    });
+    return () => unsubscribe?.();
   }, []);
 
+  // Fetch jobs from Firebase on component mount
+  useEffect(() => {
+    if (currentUserId) {
+      fetchJobs();
+    }
+  }, [currentUserId]);
+
   const fetchJobs = async () => {
+    if (!currentUserId) return;
+    
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/jobs');
+      const response = await fetch(`/api/jobs?employerId=${currentUserId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch jobs');
       }
       const result = await response.json();
       const data = result.jobs || result.data || result;
-      setJobs(Array.isArray(data) ? data : []);
+      const filteredJobs = Array.isArray(data) 
+        ? data.filter(job => job.employerId === currentUserId)
+        : [];
+      setJobs(filteredJobs);
     } catch (err) {
       console.error('Error fetching jobs:', err);
       setError(err.message);
@@ -74,6 +93,12 @@ export default function EmployerJobs() {
 
   const handleCreateJob = async (e) => {
     e.preventDefault();
+    
+    if (!currentUserId) {
+      alert('Please login to create a job');
+      return;
+    }
+    
     try {
       const jobData = {
         title: newJob.title,
@@ -84,6 +109,7 @@ export default function EmployerJobs() {
         deadline: newJob.deadline || '',
         description: newJob.description,
         requirements: newJob.requirements || '',
+        employerId: currentUserId,
         applicants: 0,
         status: 'Active',
         posted: new Date().toISOString().split('T')[0]
