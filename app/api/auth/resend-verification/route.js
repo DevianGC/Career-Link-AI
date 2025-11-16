@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuth } from 'firebase-admin/auth';
-import admin from '../../../../lib/firebaseAdmin';
+import { adminAuth } from '../../../../lib/firebaseAdmin';
 
 export async function POST(request) {
   try {
@@ -14,8 +13,7 @@ export async function POST(request) {
     }
 
     // Get user by email
-    const auth = getAuth(admin);
-    const user = await auth.getUserByEmail(email);
+    const user = await adminAuth.getUserByEmail(email);
 
     if (!user) {
       return NextResponse.json(
@@ -33,7 +31,7 @@ export async function POST(request) {
     }
 
     // Generate email verification link
-    const link = await auth.generateEmailVerificationLink(email);
+    const link = await adminAuth.generateEmailVerificationLink(email);
 
     return NextResponse.json(
       { 
