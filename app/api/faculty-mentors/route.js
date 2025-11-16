@@ -3,7 +3,7 @@ import { adminDb, adminAuth } from '../../../lib/firebaseAdmin';
 import { getAuthenticatedUser, isAdmin } from '../../../lib/dbHelpers';
 
 // GET - Fetch all faculty mentors
-export async function POST(req) {
+export async function GET(req) {
   try {
     const { user, error } = await getAuthenticatedUser();
     if (error || !user) {
