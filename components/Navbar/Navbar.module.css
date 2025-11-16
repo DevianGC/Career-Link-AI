@@ -77,6 +77,13 @@
   display: flex;
   gap: 0.75rem;
   margin-left: 0.75rem;
+  align-items: center;
+}
+
+.userName {
+  color: white;
+  font-weight: 500;
+  padding: 0.75rem 1rem;
 }
 
 .loginBtn {
@@ -94,6 +101,10 @@
   border: 1px solid white;
   color: white;
   padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .logoutBtn:hover {
@@ -178,6 +189,13 @@
     margin-left: 0;
     margin-top: 1rem;
     gap: 1rem;
+  }
+
+  .userName {
+    width: 100%;
+    text-align: center;
+    padding: 0.75rem;
+    font-size: 1.1rem;
   }
 
   .loginBtn, .registerBtn, .logoutBtn {

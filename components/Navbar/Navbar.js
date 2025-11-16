@@ -10,6 +10,7 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState(getAuthConfig().defaultRole);
+  const [userName, setUserName] = useState('');
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -32,9 +33,11 @@ export default function Navbar() {
         const user = data.user;
         setIsLoggedIn(!!user);
         setUserRole(user?.role || authConfig.defaultRole);
+        setUserName(user?.name || user?.firstName || user?.email?.split('@')[0] || '');
       } catch {
         setIsLoggedIn(false);
         setUserRole(authConfig.defaultRole);
+        setUserName('');
       }
     })();
   }, [pathname, router, authConfig, navConfig]);
@@ -62,16 +65,17 @@ export default function Navbar() {
   }, [isMenuOpen]);
   
   // Handle logout
-  // const handleLogout = () => {
-  //   if (typeof window !== 'undefined') {
-  //     localStorage.removeItem(authConfig.tokenKey);
-  //     localStorage.removeItem(authConfig.userRoleKey);
-  //     setIsLoggedIn(false);
-  //     setUserRole(authConfig.defaultRole);
-  //     setIsMenuOpen(false);
-  //     router.push('/');
-  //   }
-  // };
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsLoggedIn(false);
+      setUserRole(authConfig.defaultRole);
+      setUserName('');
+      setIsMenuOpen(false);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   return (
     <nav className={styles.navbar}>
@@ -93,19 +97,20 @@ export default function Navbar() {
           <span></span>
         </div>
 
-        <div 
-          className={`${styles.navLinks} ${isMenuOpen ? styles.active : ''}`}
-          aria-hidden={!isMenuOpen}
-          suppressHydrationWarning
-        >
-          {navConfig.publicLinks.map((link, index) => (
-            <Link key={index} href={link.path} className={styles.navLink}>{link.name}</Link>
-          ))}
-          <div className={styles.authButtons}>
-            <Link href="/auth/login" className={`btn btn-secondary ${styles.loginBtn}`}>Login</Link>
-            <Link href="/auth/register" className={`btn btn-primary ${styles.registerBtn}`}>Register</Link>
+        {mounted && !isLoggedIn && (
+          <div 
+            className={`${styles.navLinks} ${isMenuOpen ? styles.active : ''}`}
+            aria-hidden={!isMenuOpen}
+          >
+            {navConfig.publicLinks.map((link, index) => (
+              <Link key={index} href={link.path} className={styles.navLink}>{link.name}</Link>
+            ))}
+            <div className={styles.authButtons}>
+              <Link href="/auth/login" className={`btn btn-secondary ${styles.loginBtn}`}>Login</Link>
+              <Link href="/auth/register" className={`btn btn-primary ${styles.registerBtn}`}>Register</Link>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </nav>
   );
