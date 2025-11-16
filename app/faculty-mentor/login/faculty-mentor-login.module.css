@@ -104,6 +104,8 @@
   transition: all 0.2s;
   background-color: white;
   color: #1f2937;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .passwordWrapper input {
