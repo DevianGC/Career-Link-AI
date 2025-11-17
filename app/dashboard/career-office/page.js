@@ -131,8 +131,7 @@ export default function CareerOfficeDashboard() {
   // Real-time listener for registered users
   useEffect(() => {
     const usersQuery = query(
-      collection(firebaseDb, 'users'),
-      limit(10)
+      collection(firebaseDb, 'users')
     );
 
     const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
