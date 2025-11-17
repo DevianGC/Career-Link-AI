@@ -28,11 +28,13 @@ export default function CareerOfficeDashboard() {
       limit(10)
     );
 
+    let unsubscribeApplications = null;
     const unsubscribe = onSnapshot(jobsQuery, (snapshot) => {
       const jobsData = snapshot.docs
         .map(doc => ({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
+          applicants: 0
         }))
         .sort((a, b) => {
           const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
@@ -40,26 +42,41 @@ export default function CareerOfficeDashboard() {
           return dateB - dateA;
         })
         .slice(0, 5);
-      setRecentJobs(jobsData);
+
+      // Listen for applications for these jobs
+      const jobIds = jobsData.map(job => job.id);
+      if (unsubscribeApplications) unsubscribeApplications();
+      if (jobIds.length > 0) {
+        const applicationsQuery = query(
+          collection(firebaseDb, 'applications'),
+          where('jobId', 'in', jobIds.slice(0, 10))
+        );
+        unsubscribeApplications = onSnapshot(applicationsQuery, (appsSnap) => {
+          const appCounts = {};
+          appsSnap.docs.forEach(doc => {
+            const jobId = doc.data().jobId;
+            if (jobId) {
+              appCounts[jobId] = (appCounts[jobId] || 0) + 1;
+            }
+          });
+          const jobsWithCounts = jobsData.map(job => ({
+            ...job,
+            applicants: appCounts[job.id] || 0
+          }));
+          setRecentJobs(jobsWithCounts);
+        });
+      } else {
+        setRecentJobs(jobsData);
+      }
       setStats(prev => ({ ...prev, activeJobs: snapshot.size }));
     }, (error) => {
       console.error('Error fetching jobs:', error);
-      // Fallback: count all jobs if index issue
-      const fallbackQuery = query(
-        collection(firebaseDb, 'jobs')
-      );
-      const fallbackUnsubscribe = onSnapshot(fallbackQuery, (snapshot) => {
-        const activeJobs = snapshot.docs.filter(doc => doc.data().status === 'Active');
-        setRecentJobs(activeJobs.slice(0, 5).map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })));
-        setStats(prev => ({ ...prev, activeJobs: activeJobs.length }));
-      });
-      return () => fallbackUnsubscribe();
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeApplications) unsubscribeApplications();
+    };
   }, []);
 
   // Real-time listener for applications
@@ -363,6 +380,7 @@ export default function CareerOfficeDashboard() {
                         <span className={`${styles.statusBadge} ${getStatusBadgeClass(application.status)}`}>
                           {application.status || 'Pending'}
                         </span>
+                        <div className={styles.jobApplicants}>{job.applicants} applicants</div>
                       </div>
                       <div className={styles.applicationPosition}>{application.position || application.jobTitle || 'N/A'}</div>
                       <div className={styles.applicationCompany}>{application.company || application.companyName || 'N/A'}</div>
