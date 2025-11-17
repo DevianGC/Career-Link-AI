@@ -402,7 +402,7 @@ export default function CareerOfficeDashboard() {
                     <div key={job.id} className={styles.jobItem}>
                       <div className={styles.jobHeader}>
                         <div className={styles.jobTitle}>{job.title || 'Untitled Job'}</div>
-                        <div className={styles.jobApplications}>{job.applicationCount || 0} applications</div>
+
                       </div>
                       <div className={styles.jobCompany}>{job.company || job.companyName || 'N/A'}</div>
                       <div className={styles.jobLocation}>{job.location || 'Location not specified'}</div>
