@@ -380,7 +380,6 @@ export default function CareerOfficeDashboard() {
                         <span className={`${styles.statusBadge} ${getStatusBadgeClass(application.status)}`}>
                           {application.status || 'Pending'}
                         </span>
-                        <div className={styles.jobApplicants}>{job.applicants} applicants</div>
                       </div>
                       <div className={styles.applicationPosition}>{application.position || application.jobTitle || 'N/A'}</div>
                       <div className={styles.applicationCompany}>{application.company || application.companyName || 'N/A'}</div>
