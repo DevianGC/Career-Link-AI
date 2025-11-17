@@ -22,7 +22,7 @@ export default function CareerOfficeStudents() {
   useEffect(() => {
     const usersQuery = query(
       collection(firebaseDb, 'users'),
-      where('role', 'in', ['student', 'alumni'])
+      where('role', '==', 'student')
     );
 
     const unsubscribe = onSnapshot(usersQuery, async (snapshot) => {
