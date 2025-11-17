@@ -77,8 +77,13 @@ export async function PUT(request, { params }) {
 // DELETE - Delete faculty mentor
 export async function DELETE(request, { params }) {
   try {
-    const user = await getAuthenticatedUser();
-    if (!user || !isAdmin(user)) {
+    const { user, error } = await getAuthenticatedUser();
+    if (error || !user) {
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 });
+    }
+    // Allow both admin and career_office roles
+    const allowedRoles = ['career_office', 'admin'];
+    if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
