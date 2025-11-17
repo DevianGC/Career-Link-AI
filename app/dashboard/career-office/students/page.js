@@ -148,7 +148,10 @@ export default function CareerOfficeStudents() {
   }, [students, searchTerm, selectedMajor, selectedGradYear, selectedAvailability, sortBy]);
 
   // Get unique majors from students
-  const uniqueMajors = [...new Set(students.map(s => s.major).filter(Boolean))];
+  let uniqueMajors = [...new Set(students.map(s => s.major).filter(Boolean))];
+  if (!uniqueMajors.includes('Computer Science')) {
+    uniqueMajors = ['Computer Science', ...uniqueMajors];
+  }
 
   // Get unique graduation years
   const uniqueGradYears = [...new Set(students.map(s => s.graduationYear).filter(Boolean))].sort();
