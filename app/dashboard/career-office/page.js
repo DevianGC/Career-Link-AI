@@ -154,7 +154,7 @@ export default function CareerOfficeDashboard() {
       const newStudentCount = snapshot.docs.filter(doc => {
         const userData = doc.data();
         const createdAt = userData.createdAt?.toDate?.() || new Date(userData.createdAt);
-        return createdAt >= thirtyDaysAgo && (userData.role === 'student' || userData.role === 'alumni');
+        return createdAt >= thirtyDaysAgo && userData.role === 'student';
       }).length;
       
       setStats(prev => ({ ...prev, newStudents: newStudentCount }));
