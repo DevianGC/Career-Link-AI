@@ -105,9 +105,10 @@ export default function Navbar() {
             className={`${styles.navLinks} ${isMenuOpen ? styles.active : ''}`}
             aria-hidden={!isMenuOpen}
           >
-            {navConfig.publicLinks.map((link, index) => (
+            {navConfig?.publicLinks?.map((link, index) => (
               <Link key={index} href={link.path} className={styles.navLink}>{link.name}</Link>
             ))}
+            
             <div className={styles.authButtons}>
               <Link href="/auth/login" className={`btn btn-secondary ${styles.loginBtn}`}>Login</Link>
               <Link href="/auth/register" className={`btn btn-primary ${styles.registerBtn}`}>Register</Link>

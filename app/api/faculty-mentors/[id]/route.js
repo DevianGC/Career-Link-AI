@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { adminDb, adminAuth } from '../../../../lib/firebaseAdmin';
-import { getAuthenticatedUser, isAdmin } from '../../../../lib/dbHelpers';
+import { adminDb, adminAuth } from '@/lib/firebaseAdmin';
+import { getAuthenticatedUser, isAdmin } from '@/lib/dbHelpers';
 
 // PUT - Update faculty mentor
 export async function PUT(request, { params }) {

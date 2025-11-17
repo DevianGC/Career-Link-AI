@@ -38,41 +38,45 @@ export default function CandidateMatching() {
 
   // Fetch jobs from Firebase
   useEffect(() => {
-    if (!firebaseDb || !currentUserId) return;
+    if (!firebaseDb || !currentUserId) {
+      console.log('Firebase or user not ready:', { firebaseDb: !!firebaseDb, currentUserId });
+      return;
+    }
 
+    console.log('Fetching jobs for employer:', currentUserId);
+
+    // First, try to get all jobs for this employer (not filtering by status yet)
     const jobsQuery = query(
       collection(firebaseDb, 'jobs'),
-      where('employerId', '==', currentUserId),
-      where('status', '==', 'active')
+      where('employerId', '==', currentUserId)
     );
 
     const unsubscribe = onSnapshot(jobsQuery, (snapshot) => {
-      const jobsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        title: doc.data().title || 'Untitled Job',
-        department: doc.data().department || doc.data().company || 'N/A',
-        ...doc.data()
-      }));
-      setJobs(jobsData);
+      console.log('Jobs fetched:', snapshot.docs.length);
+      const jobsData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('Job data:', { id: doc.id, title: data.title, status: data.status, employerId: data.employerId });
+        return {
+          id: doc.id,
+          title: data.title || 'Untitled Job',
+          department: data.department || data.company || 'N/A',
+          ...data
+        };
+      });
+      
+      // Filter for active jobs, but if none exist, show all jobs
+      const activeJobs = jobsData.filter(job => job.status === 'active' || job.status === 'open' || !job.status);
+      console.log('Active/Open jobs:', activeJobs.length);
+      
+      if (activeJobs.length > 0) {
+        setJobs(activeJobs);
+      } else {
+        // If no active jobs, show all jobs so employer can see them
+        console.log('No active jobs, showing all:', jobsData.length);
+        setJobs(jobsData);
+      }
     }, (error) => {
       console.error('Error fetching jobs:', error);
-      // Fallback: fetch all jobs and filter client-side
-      const fallbackQuery = query(
-        collection(firebaseDb, 'jobs'),
-        where('employerId', '==', currentUserId)
-      );
-      const fallbackUnsubscribe = onSnapshot(fallbackQuery, (snapshot) => {
-        const jobsData = snapshot.docs
-          .map(doc => ({
-            id: doc.id,
-            title: doc.data().title || 'Untitled Job',
-            department: doc.data().department || doc.data().company || 'N/A',
-            ...doc.data()
-          }))
-          .filter(job => job.status === 'active');
-        setJobs(jobsData);
-      });
-      return () => fallbackUnsubscribe();
     });
 
     return () => unsubscribe();
@@ -92,6 +96,13 @@ export default function CandidateMatching() {
     setLoading(true);
     
     try {
+      // Get the selected job details
+      const selectedJobDetails = jobs.find(job => job.id === jobId);
+      if (!selectedJobDetails) {
+        setLoading(false);
+        return;
+      }
+
       // Get applications for this job
       const applicationsQuery = query(
         collection(firebaseDb, 'applications'),
@@ -117,16 +128,11 @@ export default function CandidateMatching() {
           
           // Only include verified users or students
           if (userData.emailVerified === true || userData.role === 'student') {
-            // Calculate AI match score (simplified algorithm)
-            const matchScore = calculateMatchScore(appData, userData);
-            
             candidates.push({
               id: appDoc.id,
               name: userData.fullName || appData.applicantName || 'Unknown',
               email: userData.email || appData.email || 'N/A',
               phone: userData.phone || 'N/A',
-              matchScore: matchScore,
-              aiInsights: calculateAIInsights(appData, userData, matchScore),
               skills: extractSkills(userData, appData),
               experience: userData.experience || appData.experience || 'N/A',
               education: userData.education || appData.education || 'N/A',
@@ -146,46 +152,118 @@ export default function CandidateMatching() {
         }
       }
       
-      // Sort by match score
-      candidates.sort((a, b) => b.matchScore - a.matchScore);
+      // If we have candidates, use AI matching
+      if (candidates.length > 0) {
+        await performAIMatching(candidates, selectedJobDetails);
+      } else {
+        setMatchedCandidates([]);
+      }
       
-      setMatchedCandidates(candidates);
     } catch (error) {
       console.error('Error fetching candidates:', error);
+      setMatchedCandidates([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate match score based on various factors
-  const calculateMatchScore = (appData, userData) => {
+  const performAIMatching = async (candidatesList, jobDetails) => {
+    try {
+      const user = firebaseAuth?.currentUser;
+      if (!user) {
+        // No auth, use fallback
+        const fallbackCandidates = candidatesList.map(c => ({
+          ...c,
+          matchScore: calculateFallbackScore(c, jobDetails),
+          aiInsights: {
+            skillMatch: 70,
+            experienceMatch: 65,
+            educationMatch: 75,
+            cultureFit: 68
+          }
+        }));
+        fallbackCandidates.sort((a, b) => b.matchScore - a.matchScore);
+        setMatchedCandidates(fallbackCandidates);
+        return;
+      }
+
+      const token = await user.getIdToken();
+      
+      const response = await fetch('/api/ai-matching/employer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          candidates: candidatesList,
+          jobDetails: jobDetails
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.matches) {
+        setMatchedCandidates(data.matches);
+      } else {
+        // Fallback to basic scoring
+        const fallbackCandidates = candidatesList.map(c => ({
+          ...c,
+          matchScore: calculateFallbackScore(c, jobDetails),
+          aiInsights: {
+            skillMatch: 70,
+            experienceMatch: 65,
+            educationMatch: 75,
+            cultureFit: 68
+          }
+        }));
+        fallbackCandidates.sort((a, b) => b.matchScore - a.matchScore);
+        setMatchedCandidates(fallbackCandidates);
+      }
+    } catch (error) {
+      console.error('AI Matching failed:', error);
+      // Fallback to basic scoring
+      const fallbackCandidates = candidatesList.map(c => ({
+        ...c,
+        matchScore: calculateFallbackScore(c, jobDetails),
+        aiInsights: {
+          skillMatch: 70,
+          experienceMatch: 65,
+          educationMatch: 75,
+          cultureFit: 68
+        }
+      }));
+      fallbackCandidates.sort((a, b) => b.matchScore - a.matchScore);
+      setMatchedCandidates(fallbackCandidates);
+    }
+  };
+
+  // Calculate match score based on various factors (fallback)
+  const calculateFallbackScore = (candidate, jobDetails) => {
     let score = 50; // Base score
     
     // Add points for resume
-    if (appData.resume || userData.resume) score += 10;
-    
-    // Add points for cover letter
-    if (appData.coverLetter) score += 5;
+    if (candidate.resume || candidate.resumeData) score += 10;
     
     // Add points for experience
-    if (userData.experience || appData.experience) score += 10;
+    if (candidate.experience) score += 10;
     
     // Add points for education
-    if (userData.education || appData.education) score += 10;
+    if (candidate.education) score += 10;
     
     // Add points for verified email
-    if (userData.emailVerified) score += 5;
+    if (candidate.emailVerified) score += 5;
     
     // Add points for complete profile
-    if (userData.skills && userData.skills.length > 0) score += 10;
+    if (candidate.skills && candidate.skills.length > 0) score += 10;
     
-    // Random factor for variation (in production, use real AI)
+    // Random factor for variation
     score += Math.floor(Math.random() * 10);
     
     return Math.min(score, 100);
   };
 
-  // Calculate AI insights breakdown
+  // Calculate AI insights breakdown (deprecated - now done by AI)
   const calculateAIInsights = (appData, userData, matchScore) => {
     const base = matchScore - 10;
     return {
@@ -309,12 +387,23 @@ function JobSelector({ jobs, selectedJob, setSelectedJob }) {
         </svg>
         <h2>Select Job Position</h2>
       </div>
-      <select className={styles.jobSelect} value={selectedJob} onChange={(e) => setSelectedJob(e.target.value)}>
-        <option value="">Choose a job position...</option>
-        {jobs.map(job => (
-          <option key={job.id} value={job.id}>{job.title} - {job.department}</option>
-        ))}
-      </select>
+      {jobs.length === 0 ? (
+        <div className={styles.noJobsMessage}>
+          <p>You haven't posted any jobs yet.</p>
+          <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '8px' }}>
+            Go to <a href="/dashboard/employer/jobs" style={{ color: '#1976d2', textDecoration: 'underline' }}>Job Postings</a> to create your first job posting.
+          </p>
+        </div>
+      ) : (
+        <select className={styles.jobSelect} value={selectedJob} onChange={(e) => setSelectedJob(e.target.value)}>
+          <option value="">Choose a job position...</option>
+          {jobs.map(job => (
+            <option key={job.id} value={job.id}>
+              {job.title} - {job.department} {job.status ? `(${job.status})` : ''}
+            </option>
+          ))}
+        </select>
+      )}
     </div>
   );
 }
@@ -323,7 +412,7 @@ function LoadingState() {
   return (
     <div className={styles.loadingState}>
       <div className={styles.spinner}></div>
-      <p>AI is analyzing candidates...</p>
+      <p>AI is analyzing and matching candidates...</p>
     </div>
   );
 }
@@ -404,10 +493,10 @@ function CandidateHeader({ candidate }) {
 
 function AIInsights({ insights }) {
   const items = [
-    { label: 'Skills', value: insights.skillMatch },
-    { label: 'Experience', value: insights.experienceMatch },
-    { label: 'Education', value: insights.educationMatch },
-    { label: 'Culture Fit', value: insights.cultureFit }
+    { label: 'Skills', value: insights?.skillMatch || 0 },
+    { label: 'Experience', value: insights?.experienceMatch || 0 },
+    { label: 'Education', value: insights?.educationMatch || 0 },
+    { label: 'Culture Fit', value: insights?.cultureFit || 0 }
   ];
 
   return (
