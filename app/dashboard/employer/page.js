@@ -69,6 +69,7 @@ export default function EmployerDashboard() {
       limit(10)
     );
 
+    let unsubscribeApplications = null;
     const unsubscribe = onSnapshot(jobsQuery, (snapshot) => {
       const jobsData = snapshot.docs
         .map(doc => ({
@@ -82,32 +83,43 @@ export default function EmployerDashboard() {
           const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
           return dateB - dateA;
         });
-      
-      setJobs(jobsData);
+
+      // Listen for applications for these jobs
+      const jobIds = jobsData.map(job => job.id);
+      if (unsubscribeApplications) unsubscribeApplications();
+      if (jobIds.length > 0) {
+        const applicationsQuery = query(
+          collection(firebaseDb, 'applications'),
+          where('jobId', 'in', jobIds.slice(0, 10))
+        );
+        unsubscribeApplications = onSnapshot(applicationsQuery, (appsSnap) => {
+          const appCounts = {};
+          appsSnap.docs.forEach(doc => {
+            const jobId = doc.data().jobId;
+            if (jobId) {
+              appCounts[jobId] = (appCounts[jobId] || 0) + 1;
+            }
+          });
+          const jobsWithCounts = jobsData.map(job => ({
+            ...job,
+            applicants: appCounts[job.id] || 0
+          }));
+          setJobs(jobsWithCounts);
+        });
+      } else {
+        setJobs(jobsData);
+      }
       setStats(prev => ({ ...prev, activeJobs: snapshot.size }));
       setLoading(false);
     }, (error) => {
       console.error('Error fetching jobs:', error);
-      // Fallback: fetch all jobs for this employer and filter
-      const fallbackQuery = query(
-        collection(firebaseDb, 'jobs'),
-        where('employerId', '==', currentUserId)
-      );
-      const fallbackUnsubscribe = onSnapshot(fallbackQuery, (snapshot) => {
-        const activeJobs = snapshot.docs.filter(doc => doc.data().status === 'Active');
-        setJobs(activeJobs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          posted: doc.data().createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
-          applicants: 0
-        })));
-        setStats(prev => ({ ...prev, activeJobs: activeJobs.length }));
-      });
       setLoading(false);
-      return () => fallbackUnsubscribe();
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubscribeApplications) unsubscribeApplications();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUserId]);
 
