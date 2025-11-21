@@ -88,8 +88,8 @@ export default function Navbar() {
           <span className={styles.highlight}>CareerLink</span>
         </Link>
 
-        <div 
-          className={`${styles.mobileMenuButton} ${isMenuOpen ? styles.active : ''}`} 
+        <div
+          className={`${styles.mobileMenuButton} ${isMenuOpen ? styles.active : ''}`}
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           aria-label="Toggle menu"
           role="button"
@@ -100,21 +100,45 @@ export default function Navbar() {
           <span></span>
         </div>
 
-        {mounted && !loading && !isLoggedIn && (
-          <div 
-            className={`${styles.navLinks} ${isMenuOpen ? styles.active : ''}`}
-            aria-hidden={!isMenuOpen}
-          >
-            {navConfig?.publicLinks?.map((link, index) => (
-              <Link key={index} href={link.path} className={styles.navLink}>{link.name}</Link>
-            ))}
-            
+        <div
+          className={`${styles.navLinks} ${isMenuOpen ? styles.active : ''}`}
+          aria-hidden={!isMenuOpen}
+        >
+          {/* Loading skeleton or fallback */}
+          {loading && (
+            <div className={styles.navSkeleton}>
+              <div className={styles.skeletonLink} />
+              <div className={styles.skeletonLink} />
+              <div className={styles.skeletonBtn} />
+            </div>
+          )}
+
+          {/* Public links for not logged in users */}
+          {!loading && !isLoggedIn && navConfig?.publicLinks?.map((link, index) => (
+            <Link key={index} href={link.path} className={styles.navLink}>{link.name}</Link>
+          ))}
+
+          {/* Auth buttons for not logged in users */}
+          {!loading && !isLoggedIn && (
             <div className={styles.authButtons}>
               <Link href="/auth/login" className={`btn btn-secondary ${styles.loginBtn}`}>Login</Link>
               <Link href="/auth/register" className={`btn btn-primary ${styles.registerBtn}`}>Register</Link>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Private links for logged in users */}
+          {!loading && isLoggedIn && navConfig?.privateLinks?.[userRole]?.map((link, index) => (
+            <Link key={index} href={link.path} className={styles.navLink}>{link.name}</Link>
+          ))}
+
+          {/* User dropdown or logout for logged in users */}
+          {!loading && isLoggedIn && (
+            <div className={styles.authButtons}>
+              <span className={styles.userName}>{userName}</span>
+              <button onClick={handleLogout} className={`btn btn-secondary ${styles.loginBtn}`}>Logout</button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );
