@@ -115,7 +115,7 @@ export default function Home() {
           <div className={styles.ctaContent}>
             <h2 className={styles.ctaTitle}>Ready to take the next step in your career?</h2>
             <p className={styles.ctaText}>Join CareerLink today and connect with opportunities tailored for GCCCS students and graduates.</p>
-            <Button href="/auth/register" variant="primary" size="large">
+            <Button href="/auth/register" className={styles.ctaWhiteButton} size="large">
               Register Now
             </Button>
           </div>

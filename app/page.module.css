@@ -153,14 +153,19 @@
 }
 
 /* CTA Button Override */
-.ctaSection .btn,
-.ctaSection button,
-.ctaSection a[href="/register"] {
-  background-color: #ff6600 !important;
-  color: white !important;
-  border: 2px solid white !important;
+
+.ctaWhiteButton {
+  background-color: #fff !important;
+  color: #ff6600 !important;
+  border: 2px solid #ff6600 !important;
   border-radius: 1rem;
   transition: all 0.3s ease !important;
+}
+
+.ctaWhiteButton:hover {
+  background-color: orangered !important;
+  color: #fff !important;
+  border: 2px solid #ffffff !important;
 }
 
 .ctaSection .btn:hover,
